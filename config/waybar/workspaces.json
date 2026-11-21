@@ -1,0 +1,31 @@
+{
+  "shaped": true,
+  "joined": false,
+  "chain": false,
+  "strip": null,
+  "l": "",
+  "r": "",
+  "thin": "#1c1c1c",
+  "cap_font": "FantasqueSansM Nerd Font Mono 36.141px",
+  "rise": 5500,
+  "focused": [
+    "#ffffff",
+    "#000000"
+  ],
+  "unfocused": [
+    "#303030",
+    "#e6e6e6"
+  ],
+  "visible": [
+    "#303030",
+    "#ffffff"
+  ],
+  "urgent": [
+    "#bfbfbf",
+    "#000000"
+  ],
+  "mode": [
+    "#ffffff",
+    "#000000"
+  ]
+}

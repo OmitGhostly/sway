@@ -1,0 +1,593 @@
+#!/usr/bin/env bash
+# =============================================================================
+#  sway-dots uninstaller - takes this desktop off again: the config, and if you want, sway itself and the programs
+#  the installer added. Your own files and the programs you already had are left alone.
+#
+#  Usage:  ./uninstall.sh [options]          (also installed as:  swaydots-uninstall)
+#    (default)        remove the config (and put your old configs back), then ask about sway and the programs
+#    --yes            no questions: the config, sway itself and the programs the installer added
+#    --config-only    only the config - keep sway and every program
+#    --all-programs   also offer the setup's programs that were already there before the installer ran
+#                     (only ones nothing else needs; core packages - git, python, GTK, Xwayland... - are always kept)
+#    --no-restore     do not put your old configs (*.bak-*) back, leave them where they are
+#    --force          remove sway even if it is the only desktop on this computer
+#    --dry-run        only show what would happen
+#    -h, --help       this help
+#
+#  What it removes
+#    config     ~/.config/{sway,waybar,dunst,kitty,ghostty,fastfetch,cava,swappy,...} (the copies the
+#               installer made - your originals come back from *.bak-*), the dark style it merged into
+#               ~/.config/gtk-3.0 (your theme and bookmarks stay), the greeting / prompt / asciiquarium lines in
+#               ~/.bashrc and ~/.zshrc, the cursor files the Settings window wrote, the update checks (and the
+#               pacman / dnf / apt hook), pokescript, saved state and caches, and the wallpapers and font it copied
+#    programs   sway (or SwayFX) itself, and the packages the installer installed (--all-programs: also the ones
+#               that were there before). A package that something else still needs is kept. A sway that the
+#               installer swapped for SwayFX is swapped back.
+# =============================================================================
+# shellcheck disable=SC2088   # (the ~ in the messages is text for you to read, not a path)
+set -uo pipefail
+
+do_restore=1; dry=0; mode=ask; force=0; all_programs=0
+say()  { printf '\033[1;35m::\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m!!\033[0m %s\n' "$*" >&2; }
+die()  { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
+for arg in "$@"; do
+  case "$arg" in
+    --yes|-y)       mode=all ;;
+    --config-only)  mode=config ;;
+    --all-programs) all_programs=1 ;;
+    --no-restore)   do_restore=0 ;;
+    --force)        force=1 ;;
+    --dry-run)      dry=1 ;;
+    -h|--help)      sed -n '3,26p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) die "unknown option: $arg (try --help)" ;;
+  esac
+done
+[ "$(id -u)" -eq 0 ] && [ "${SWAYDOTS_ALLOW_ROOT:-0}" != 1 ] && die "run this as your normal user, not with sudo (it asks for your password only to remove programs)"
+
+# Run from a copy: this file may sit inside a folder that is about to be removed.
+if [ -z "${SWAYDOTS_UNINSTALL_COPY:-}" ]; then
+  here="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo /)"
+  tmp="$(mktemp "${TMPDIR:-/tmp}/swaydots-uninstall.XXXXXX")" || die "could not make a temporary copy of the uninstaller"
+  cp "${BASH_SOURCE[0]}" "$tmp" && chmod 700 "$tmp"
+  SWAYDOTS_UNINSTALL_COPY="$tmp" SWAYDOTS_UNINSTALL_HERE="$here" exec bash "$tmp" "$@"
+fi
+here="${SWAYDOTS_UNINSTALL_HERE:-/}"
+trap 'rm -f "$SWAYDOTS_UNINSTALL_COPY"' EXIT
+
+cfg="${XDG_CONFIG_HOME:-$HOME/.config}"
+data="${XDG_DATA_HOME:-$HOME/.local/share}"
+state="${XDG_STATE_HOME:-$HOME/.local/state}/sway-dots"
+cache="${XDG_CACHE_HOME:-$HOME/.cache}"
+manifest="$state/installed"
+# programs are removed as root: through sudo, else doas (with a rule in /etc/doas.conf), else su (asks for root's password)
+as_root() {
+  if [ "$(id -u)" -eq 0 ]; then "$@"
+  elif command -v sudo >/dev/null 2>&1; then sudo "$@"
+  elif command -v doas >/dev/null 2>&1 && [ -f /etc/doas.conf ]; then doas "$@"
+  else su root -c "$(printf '%q ' "$@")"; fi
+}
+SUDO=as_root; [ "$(id -u)" -eq 0 ] && SUDO=""
+removed=(); kept=()
+
+run() { if [ "$dry" -eq 1 ]; then printf '   + %s\n' "$*"; return 0; fi; "$@"; }
+gone() { removed+=("$1"); }
+ask() {   # ask "question" default(y|n) -> 0 for yes
+  local def="$2" a=""
+  if [ "$mode" = all ]; then return 0; fi
+  if [ ! -t 0 ] && [ ! -r /dev/tty ]; then [ "$def" = y ]; return; fi
+  printf '\033[1;36m??\033[0m %s %s ' "$1" "$([ "$def" = y ] && echo '[Y/n]' || echo '[y/N]')"
+  read -r a </dev/tty 2>/dev/null || a=""
+  case "${a:-$def}" in [Yy]*) return 0 ;; *) return 1 ;; esac
+}
+
+case "${SWAYDOTS_OS:-$(uname -s)}" in
+  Linux) ;;
+  *) printf '\033[1;31mxx\033[0m %s\n' "This uninstaller is made for Linux - it does not run on ${SWAYDOTS_OS:-$(uname -s)}." >&2; exit 1 ;;
+esac
+
+detect_family() {
+  local f="${SWAYDOTS_OS_RELEASE:-/etc/os-release}" id="" like=""
+  if [ -r "$f" ]; then
+    # shellcheck source=/dev/null
+    id="$( . "$f"; echo "${ID:-}" )"
+    # shellcheck source=/dev/null
+    like="$( . "$f"; echo "${ID_LIKE:-}" )"
+  fi
+  case " $id $like " in
+    *" fedora "*|*" rhel "*|*" centos "*) echo fedora ;;
+    *" arch "*|*" archlinux "*)           echo arch ;;
+    *" debian "*|*" ubuntu "*)            echo debian ;;
+    *)                                    echo unknown ;;
+  esac
+}
+FAMILY="$(detect_family)"
+
+# =============================================================================
+#  1. what is there
+# =============================================================================
+ours=()
+for d in "$cfg"/*/; do
+  d="${d%/}"
+  [ -f "$d/.sway-dots-installed" ] && [ ! -L "$d" ] && ours+=("$d")
+done
+in_sway=0
+{ [ -n "${SWAYSOCK:-}" ] || [ "${XDG_CURRENT_DESKTOP:-}" = sway ] || [ "${DESKTOP_SESSION:-}" = sway ]; } && in_sway=1
+
+if [ "${#ours[@]}" -eq 0 ] && [ ! -f "$manifest" ] && [ ! -d "$data/sway-dots-updater" ] \
+   && ! compgen -G "$cfg/.swaydots-removing-*" >/dev/null; then
+  say "the sway-dots config is not installed for $(id -un) (nothing in $cfg carries its mark)"
+fi
+say "this removes the sway-dots desktop config$( [ "$mode" = config ] && echo '' || echo ', and if you say so, sway and the programs the installer added')"
+[ "$in_sway" -eq 1 ] && warn "you are in a sway session right now - it keeps running until you log out; then pick your other desktop at the login screen"
+
+do_config=1
+if [ "$mode" = ask ] && [ "$dry" -eq 0 ]; then
+  ask "Remove the sway-dots config$( [ "$do_restore" -eq 1 ] && echo ' and put your old configs back')?" y || do_config=0
+fi
+
+# =============================================================================
+#  2. the config
+# =============================================================================
+remove_rc_lines() {   # take the installer's lines (marker + the line after it) out of ~/.bashrc and ~/.zshrc
+  local rc real
+  for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    [ -f "$rc" ] || continue
+    grep -qE '^(# sway-dots: (pokemon fastfetch|see-through asciiquarium|black / grey / white prompt)|#sway-dots-off# )' "$rc" || continue
+    if [ "$dry" -eq 1 ]; then echo "   + remove the sway-dots lines from $rc"; continue; fi
+    # (written into the real file through a copy that keeps its permissions: a ~/.zshrc linked from a dotfiles
+    #  folder stays a link)
+    real="$(readlink -f -- "$rc" 2>/dev/null)"; [ -n "$real" ] || real="$rc"
+    cp -p -- "$real" "$real.swaytmp" || continue
+    awk 'skip { skip = 0; next }
+         /^# sway-dots: (pokemon fastfetch|see-through asciiquarium|black \/ grey \/ white prompt)/ { skip = 1; if (blank) blank = 0; next }
+         index($0, "#sway-dots-off# ") == 1 { $0 = substr($0, 17) }   # (a greeting of yours the installer turned off)
+         { if (blank) print ""; blank = 0 }
+         /^$/ { blank = 1; next }
+         { print }
+         END { if (blank) print "" }' "$real" >"$real.swaytmp" && mv -f -- "$real.swaytmp" "$real"
+    gone "the greeting, prompt and asciiquarium lines in ~/${rc##*/}"
+    # a file the installer created that now holds nothing of yours
+    if grep -qxF "rc $rc" "$manifest" 2>/dev/null && ! grep -qvE '^[[:space:]]*$|^# ~/\.(bash|zsh)rc - created by the sway-dots installer$' "$rc"; then
+      rm -f "$rc"; gone "~/${rc##*/} (the installer had created it)"
+    fi
+  done
+}
+
+remove_block() {   # remove_block FILE START-LINE END-LINE: the block Settings wrote (between its marks)
+  local f="$1"
+  [ -f "$f" ] && grep -qF "$2" "$f" || return 0
+  if [ "$dry" -eq 1 ]; then echo "   + remove the sway-dots block from $f"; return 0; fi
+  awk -v s="$2" -v e="$3" 'index($0, s) == 1 { skip = 1; next } skip && index($0, e) == 1 { skip = 0; next } !skip { print }' \
+    "$f" >"$f.swaytmp" && mv -f "$f.swaytmp" "$f"
+  grep -q '[^[:space:]]' "$f" || rm -f "$f"           # nothing else was in it
+  gone "the Settings block (${2#* >>> sway-dots }) in ~/${f##*/}"
+}
+
+# the default program for folders the installer set (~/.config/mimeapps.list): back to what it was before - only
+# while it is still the installer's (a default you picked since then stays)
+restore_mime_defaults() {
+  local f="$cfg/mimeapps.list" real kind type prev seen=" " cur changed=0
+  [ -f "$manifest" ] && [ -f "$f" ] || return 0
+  real="$(readlink -f -- "$f" 2>/dev/null)"; [ -n "$real" ] || real="$f"
+  while read -r kind type prev; do
+    [ "$kind" = mime ] && [ -n "$type" ] || continue
+    case "$seen" in *" $type "*) continue ;; esac           # (the first record is what was there originally)
+    seen="$seen$type "
+    cur="$(awk -v t="$type" '/^\[/ { s = ($0 == "[Default Applications]") }
+                            s && index($0, t "=") == 1 { print substr($0, length(t) + 2); exit }' "$real")"
+    case "$cur" in sway-dots-folders.desktop*) ;; *) continue ;; esac
+    [ "$prev" = - ] && prev=""
+    if [ "$dry" -eq 1 ]; then echo "   + $type in ~/.config/mimeapps.list: ${prev:-(the system default)}"; continue; fi
+    cp -p -- "$real" "$real.swaytmp" || continue
+    awk -v t="$type" -v p="$prev" '/^\[/ { s = ($0 == "[Default Applications]") }
+         s && index($0, t "=") == 1 { if (p != "") print t "=" p; next } { print }' "$real" >"$real.swaytmp" \
+      && mv -f -- "$real.swaytmp" "$real" && changed=1
+    gone "the default for folders (${prev:-the system default} again)"
+  done <"$manifest"
+  # it held nothing but our line: the file goes (the installer made it)
+  if [ "$changed" -eq 1 ] && ! grep -qvE '^[[:space:]]*$|^\[Default Applications\]$' "$real" 2>/dev/null; then
+    [ -L "$f" ] || rm -f "$f"
+  fi
+  return 0
+}
+
+remove_ini_key_if() {   # remove_ini_key_if FILE KEY VALUE: only when it still has the value the installer set
+  local f="$1"
+  [ -f "$f" ] || return 0
+  grep -qE "^[[:space:]]*$2[[:space:]]*=[[:space:]]*$3[[:space:]]*\$" "$f" || return 0
+  # (written through a temporary file: the file itself stays - its permissions, a link to it)
+  [ "$dry" -eq 1 ] && { printf '   + remove "%s=%s" from %s\n' "$2" "$3" "$f"; return 0; }
+  sed -E "/^[[:space:]]*$2[[:space:]]*=[[:space:]]*$3[[:space:]]*\$/d" "$f" >"$f.swaytmp" && cat "$f.swaytmp" >"$f"
+  rm -f "$f.swaytmp"
+}
+
+config_step() {
+  local d name latest rest
+  # the update checks and the system hook first
+  if [ -x "$cfg/sway/scripts/Update.sh" ] && grep -qxF "$(id -un)" "${SWAYDOTS_TEST_ROOT:-}/etc/sway-dots/users" 2>/dev/null; then
+    say "removing the system update hook (asks for your password)"
+    if [ "$dry" -eq 1 ]; then echo "   + swaydots-update --remove-hook"
+    elif bash "$cfg/sway/scripts/Update.sh" --remove-hook; then gone "the pacman / dnf / apt hook"
+    else warn "could not remove the system hook - run later:  sudo rm /etc/pacman.d/hooks/sway-dots.hook /etc/dnf/libdnf5-plugins/actions.d/sway-dots.actions"; fi
+  fi
+  if [ -f "$cfg/systemd/user/swaydots-update.service" ]; then
+    command -v systemctl >/dev/null 2>&1 && [ "$dry" -eq 0 ] && systemctl --user stop swaydots-update.service >/dev/null 2>&1
+    run rm -f "$cfg/systemd/user/swaydots-update.service"
+    command -v systemctl >/dev/null 2>&1 && [ "$dry" -eq 0 ] && systemctl --user daemon-reload >/dev/null 2>&1
+    gone "the update checks (swaydots-update)"
+  fi
+  # the wallpaper slideshow (Settings > Wallpaper), if it runs
+  [ "$dry" -eq 0 ] && [ -x "$cfg/sway/scripts/WallCycle.sh" ] && bash "$cfg/sway/scripts/WallCycle.sh" --stop >/dev/null 2>&1
+
+  # the config folders the installer made; your originals come back from the newest *.bak-*.
+  # Ours is first moved aside as .swaydots-removing-NAME, then your backup goes in its place, then the aside copy is
+  # deleted: an uninstall stopped anywhere in between (Ctrl+C) leaves that folder, and the next run finishes the job.
+  put_back() {   # put_back NAME: your newest backup of ~/.config/NAME back in place (when there is one, and wanted)
+    local latest
+    latest="$(find "$cfg" -maxdepth 1 -name "$1.bak-*" ! -name '*.part' 2>/dev/null | sort | tail -n1)"
+    if [ "$do_restore" -eq 1 ] && [ -n "$latest" ] && [ ! -e "$cfg/$1" ]; then
+      run mv "$latest" "$cfg/$1"; gone "~/.config/$1 (your own one from ${latest##*/} is back)"
+    else
+      gone "~/.config/$1"
+    fi
+  }
+  for d in "$cfg"/.swaydots-removing-*; do        # (an uninstall that was stopped halfway)
+    [ -d "$d" ] || continue
+    name="${d##*/.swaydots-removing-}"
+    [ -e "$cfg/$name" ] || put_back "$name"
+    run rm -rf "$d"
+  done
+  for d in "${ours[@]}"; do
+    name="${d##*/}"
+    [ "$name" = gtk-3.0 ] && continue
+    run rm -rf "$cfg/.swaydots-removing-$name"
+    run mv "$d" "$cfg/.swaydots-removing-$name"
+    put_back "$name"
+    run rm -rf "$cfg/.swaydots-removing-$name"
+  done
+
+  # ~/.config/gtk-3.0 is shared: put the old settings.ini back (or take out the two settings the installer added),
+  # keep your bookmarks and everything else
+  if [ -f "$cfg/gtk-3.0/.sway-dots-installed" ]; then
+    latest="$(find "$cfg" -maxdepth 1 -name 'gtk-3.0.bak-*' ! -name '*.part' 2>/dev/null | sort | tail -n1)"
+    if [ "$do_restore" -eq 1 ] && [ -n "$latest" ] && [ -f "$latest/settings.ini" ]; then
+      run cp -f "$latest/settings.ini" "$cfg/gtk-3.0/settings.ini"
+      run rm -rf "$latest"
+      gone "the dark style in ~/.config/gtk-3.0 (your old settings.ini is back, bookmarks kept)"
+    else
+      remove_ini_key_if "$cfg/gtk-3.0/settings.ini" gtk-application-prefer-dark-theme 1
+      remove_ini_key_if "$cfg/gtk-3.0/settings.ini" gtk-font-name 'Sans 10'
+      # the cursor the Settings window set there (Capitaine is removed with the config); a file with nothing else
+      # left in it but a cursor size was the installer's own
+      remove_ini_key_if "$cfg/gtk-3.0/settings.ini" gtk-cursor-theme-name capitaine-cursors
+      if [ -f "$cfg/gtk-3.0/settings.ini" ] \
+         && ! grep -qvE '^[[:space:]]*$|^\[Settings\]$|^gtk-cursor-theme-size=' "$cfg/gtk-3.0/settings.ini"; then
+        run rm -f "$cfg/gtk-3.0/settings.ini"
+      fi
+      gone "the dark style in ~/.config/gtk-3.0 (bookmarks kept)"
+    fi
+    run rm -f "$cfg/gtk-3.0/.sway-dots-installed"
+    # nothing left in it but the [Settings] heading (the installer had made it): remove it, and the folder if empty
+    if [ -f "$cfg/gtk-3.0/settings.ini" ] && ! grep -qvE '^[[:space:]]*$|^\[Settings\]$' "$cfg/gtk-3.0/settings.ini"; then
+      run rm -f "$cfg/gtk-3.0/settings.ini"
+    fi
+    [ -d "$cfg/gtk-3.0" ] && run rmdir "$cfg/gtk-3.0" 2>/dev/null
+  fi
+
+  remove_rc_lines
+
+  # what the Settings window wrote for the mouse cursor (only files that are clearly its own)
+  local f
+  for f in "$HOME/.icons/default/index.theme" "$data/icons/default/index.theme"; do
+    [ -f "$f" ] && grep -qx 'Comment=Default cursor theme' "$f" && grep -qx 'Name=Default' "$f" \
+      && [ "$(grep -c . "$f")" -le 4 ] && { run rm -f "$f"; run rmdir "${f%/*}" 2>/dev/null; gone "${f/#$HOME/\~}"; }
+  done
+  # GNOME's settings store: the cursor / theme values XSettings.sh changed, back to what they were before
+  f="${XDG_STATE_HOME:-$HOME/.local/state}/sway-dots/gsettings-before"
+  if [ -f "$f" ] && command -v gsettings >/dev/null 2>&1; then
+    local key val
+    while IFS='=' read -r key val; do
+      case "$key" in gtk-theme|icon-theme|cursor-theme|cursor-size) ;; *) continue ;; esac
+      val="${val#int32 }"; val="${val#\'}"; val="${val%\'}"
+      [ -n "$val" ] && run gsettings set org.gnome.desktop.interface "$key" "$val" 2>/dev/null
+    done <"$f"
+    gone "the cursor / theme in GNOME's settings (back to what they were)"
+  fi
+  f="$cfg/environment.d/90-swaydots-cursor.conf"
+  [ -f "$f" ] && { run rm -f "$f"; gone "~/.config/environment.d/90-swaydots-cursor.conf"; }
+  # GTK 4: a settings.ini that holds nothing but the cursor the Settings window set
+  f="$cfg/gtk-4.0/settings.ini"
+  if [ -f "$f" ] && ! grep -qvE '^[[:space:]]*$|^\[Settings\]$|^gtk-cursor-theme-(name|size)=' "$f"; then
+    run rm -f "$f"; gone "~/.config/gtk-4.0/settings.ini (only the cursor was in it)"
+  fi
+  # GNOME apps (Settings > Themes): its part of gtk.css (the file goes when nothing else is in it), and GNOME's
+  # dark-mode setting back to what it was
+  f="$cfg/gtk-4.0/gtk.css"
+  if [ -f "$f" ] && grep -qF '/* >>> sway-dots: GNOME apps' "$f"; then
+    if [ "$dry" -eq 0 ]; then
+      awk 'index($0, "/* >>> sway-dots: GNOME apps") == 1 { skip = 1 } !skip { print } index($0, "/* <<< sway-dots <<< */") == 1 { skip = 0 }' \
+        "$f" >"$f.tmp" && mv -f "$f.tmp" "$f"
+      grep -q '[^[:space:]]' "$f" || rm -f "$f"
+    fi
+    gone "the GNOME apps colours in ~/.config/gtk-4.0/gtk.css"
+  fi
+  f="${XDG_STATE_HOME:-$HOME/.local/state}/sway-dots/gnome-color-scheme"
+  if [ -f "$f" ] && command -v gsettings >/dev/null 2>&1; then
+    v="$(head -n1 "$f")"
+    case "$v" in default|prefer-light|prefer-dark) run gsettings set org.gnome.desktop.interface color-scheme "$v" 2>/dev/null ;; esac
+  fi
+  # the proxy the Settings window set (Network > Proxy): its lines, and GNOME's proxy setting only when it set one
+  if [ -f "$HOME/.xprofile" ] && grep -q '^# >>> sway-dots proxy' "$HOME/.xprofile" 2>/dev/null; then
+    # (only in a desktop session: without its D-Bus, gsettings would just leave a stray cache file)
+    [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] && command -v gsettings >/dev/null 2>&1 \
+      && gsettings list-schemas 2>/dev/null | grep -qx 'org.gnome.system.proxy' \
+      && run gsettings set org.gnome.system.proxy mode none
+    remove_block "$HOME/.xprofile" "# >>> sway-dots proxy" "# <<< sway-dots proxy <<<"
+  fi
+  f="$cfg/environment.d/90-swaydots-proxy.conf"
+  [ -f "$f" ] && { run rm -f "$f"; gone "~/.config/environment.d/90-swaydots-proxy.conf"; }
+
+  restore_mime_defaults
+  # files the installer recorded (wallpapers and the font it copied, a kitty from kitty's own installer...)
+  local kind path
+  if [ -f "$manifest" ]; then
+    while read -r kind path; do
+      [ "$kind" = path ] && [ -n "$path" ] || continue
+      case "$path" in "$HOME"/*) ;; *) continue ;; esac          # only ever inside your home folder
+      [ -e "$path" ] || [ -L "$path" ] || continue
+      run rm -rf "$path"; gone "${path/#$HOME/\~}"
+    done <"$manifest"
+  elif [ -d "$here/wallpapers" ]; then
+    # an older install has no list: the bundled wallpapers go only where they are still exactly the same file
+    for f in "$here"/wallpapers/*; do
+      [ -f "$f" ] && cmp -s "$f" "$HOME/Pictures/wallpapers/${f##*/}" && { run rm -f "$HOME/Pictures/wallpapers/${f##*/}"; gone "~/Pictures/wallpapers/${f##*/}"; }
+    done
+  fi
+
+  # downloads, saved state and caches
+  for d in "$data/sway-dots-updater" "$data/sway-dots" "$data/pokescript" "$cache/sway" \
+           "$cache/sway-dots-install.log" "$cache/sway-dots-update.log" "$HOME/.local/bin/swaydots-update"; do
+    [ -e "$d" ] || [ -L "$d" ] || continue
+    run rm -rf "$d"; gone "${d/#$HOME/\~}"
+  done
+  # the cursor theme half-unpacked by an install that was stopped (Ctrl+C) before it could clean up
+  for d in "$data"/icons/.swaydots-cursor.??????; do
+    [ -d "$d" ] && { run rm -rf "$d"; gone "${d/#$HOME/\~}"; }
+  done
+
+  # folders that are left empty now (rmdir only ever removes an empty one)
+  for d in "$HOME/Pictures/wallpapers" "$HOME/Pictures/Screenshots" "$HOME/.icons" "$data/icons" "$data/applications" "$cfg/gtk-4.0" \
+           "$cfg/environment.d" "$cfg/systemd/user" "$cfg/systemd"; do
+    [ -d "$d" ] && run rmdir "$d" 2>/dev/null
+  done
+  return 0
+}
+
+[ "$do_config" -eq 1 ] && { say "removing the config"; config_step; }
+
+# =============================================================================
+#  3. sway itself and the programs
+# =============================================================================
+# never removed: other programs and desktops need them
+PROTECTED=" git curl unzip python3 python python3-gobject python3-cairo python-gobject python-cairo python3-gi python3-gi-cairo
+ gir1.2-gtk-3.0 gtk3 fontconfig xdg-utils bluez bluez-utils dbus-tools xorg-x11-server-Xwayland xorg-xwayland xwayland
+ xdg-desktop-portal-wlr xdg-desktop-portal-gtk sound-theme-freedesktop libnotify
+ libnotify-bin google-noto-color-emoji-fonts google-noto-emoji-color-fonts noto-fonts-emoji fonts-noto-color-emoji
+ adwaita-cursor-theme adwaita-icon-theme libpulse pulseaudio-utils network-manager-applet network-manager-gnome
+ mesa-utils glx-utils sudo systemd dbus bash polkit-gnome mate-polkit doas "
+PROTECTED=" ${PROTECTED//$'\n'/ } "           # (one line, so every name has a space on both sides)
+
+sway_pkgs() { echo "sway swayfx"; }
+installed() {
+  case "$FAMILY" in
+    fedora) rpm -q "$1" >/dev/null 2>&1 ;;
+    arch)   pacman -Qq "$1" >/dev/null 2>&1 ;;
+    debian) dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q 'ok installed' ;;
+    *)      return 1 ;;
+  esac
+}
+other_desktops() {   # the login sessions that are not sway
+  local f n=0
+  for f in "${SWAYDOTS_TEST_ROOT:-}"/usr/share/xsessions/*.desktop "${SWAYDOTS_TEST_ROOT:-}"/usr/share/wayland-sessions/*.desktop \
+           "${SWAYDOTS_TEST_ROOT:-}"/usr/local/share/xsessions/*.desktop; do
+    [ -e "$f" ] || continue
+    case "${f##*/}" in sway.desktop|swayfx.desktop|sway-dots-nvidia.desktop|sway-uwsm.desktop) continue ;; esac
+    n=$((n + 1))
+  done
+  echo "$n"
+}
+
+# which packages are ours to remove
+candidates=()
+add_candidate() {
+  local p="$1" c
+  [ -n "$p" ] || return 0
+  case "$PROTECTED" in *" $p "*) kept+=("$p (other programs need it)"); return 0 ;; esac
+  # (any Python and its GTK bindings)
+  case "$p" in python3*) kept+=("$p (other programs need it)"); return 0 ;; esac
+  for c in "${candidates[@]}"; do [ "$c" = "$p" ] && return 0; done
+  installed "$p" && candidates+=("$p")
+}
+if [ -f "$manifest" ]; then
+  while read -r kind value; do [ "$kind" = pkg ] && add_candidate "$value"; done <"$manifest"
+fi
+if [ "$all_programs" -eq 1 ]; then
+  # the installer's own package list (from install.sh next to this file, or the copy the updater keeps)
+  for src in "$here/install.sh" "$data/sway-dots-updater/repo/install.sh"; do
+    [ -f "$src" ] || continue
+    eval "$(sed -n '/^packages_for() {/,/^}/p' "$src")"
+    # shellcheck disable=SC2046
+    for item in $(packages_for 2>/dev/null); do
+      IFS='|' read -ra alts <<<"$item"
+      for a in "${alts[@]}"; do
+        # (Fedora: the real name - ImageMagick for imagemagick, dbus-tools for /usr/bin/...; nothing if not installed)
+        [ "$FAMILY" = fedora ] && a="$(rpm -q --whatprovides "$a" --qf '%{NAME}\n' 2>/dev/null | head -n1)"
+        add_candidate "$a"
+      done
+    done
+    break
+  done
+fi
+
+# keep only what nothing else needs, so removing a program never takes other software with it
+removable=(); needed=()
+safe_set() {
+  local -a S=("$@") caps keep next ok
+  local p out cap prov
+  case "$FAMILY" in
+    fedora)
+      for _ in 1 2 3 4 5 6 7 8 9 10; do
+        [ "${#S[@]}" -gt 0 ] || break
+        out="$(LC_ALL=C $SUDO rpm -e --test "${S[@]}" 2>&1)" && break
+        mapfile -t caps < <(printf '%s\n' "$out" | sed -n 's/^[[:space:]]*\(.*\) is needed by (installed) .*/\1/p' | sort -u)
+        [ "${#caps[@]}" -gt 0 ] || { needed+=("${S[@]}"); S=(); break; }     # rpm said no without a reason: keep all
+        keep=()
+        for cap in "${caps[@]}"; do
+          while read -r prov; do keep+=("$prov"); done < <(rpm -q --whatprovides "$cap" --qf '%{NAME}\n' 2>/dev/null)
+        done
+        next=()
+        for p in "${S[@]}"; do
+          if printf '%s\n' "${keep[@]}" | grep -qxF "$p"; then needed+=("$p"); else next+=("$p"); fi
+        done
+        [ "${#next[@]}" -lt "${#S[@]}" ] || { needed+=("${S[@]}"); S=(); break; }
+        S=("${next[@]}")
+      done ;;
+    debian)
+      ok=()
+      for p in "${S[@]}"; do
+        # what apt would take away with it - anything outside our list means something else needs it
+        if LC_ALL=C apt-get -s remove "$p" 2>/dev/null | awk '/^Remv /{print $2}' | grep -qvxF -f <(printf '%s\n' "${S[@]}"); then
+          needed+=("$p")
+        else ok+=("$p"); fi
+      done
+      S=("${ok[@]}") ;;
+    arch) ;;   # pacman refuses to break anything itself (see remove_pkgs)
+  esac
+  removable=("${S[@]}")
+}
+
+remove_pkgs() {
+  local p failed=()
+  case "$FAMILY" in
+    fedora) run $SUDO dnf remove -y "$@" || failed=("$@") ;;
+    arch)
+      if ! run $SUDO pacman -Rns --noconfirm "$@"; then
+        # one by one (twice: a package needed only by another one on the list goes in the second round)
+        local left=("$@") again
+        for _ in 1 2; do
+          again=()
+          for p in "${left[@]}"; do run $SUDO pacman -Rns --noconfirm "$p" >/dev/null 2>&1 || again+=("$p"); done
+          left=("${again[@]}")
+        done
+        failed=("${left[@]}")
+      fi ;;
+    debian) run $SUDO apt-get remove -y "$@" || failed=("$@") ;;
+  esac
+  for p in "${failed[@]}"; do needed+=("$p"); done
+  for p in "$@"; do
+    printf '%s\n' "${failed[@]}" | grep -qxF "$p" || gone "$p"
+  done
+}
+
+# the installer swapped your own sway (the Fedora Sway spin) for SwayFX: swap it back instead of removing SwayFX
+swap_back() {
+  [ "$FAMILY" = fedora ] && [ -f "$manifest" ] && grep -qx "swapped sway" "$manifest" && installed swayfx || return 1
+  if ask "Swap SwayFX back to the plain sway you had before?" y; then
+    if run $SUDO dnf swap -y swayfx sway; then gone "SwayFX (plain sway is back)"; else kept+=("swayfx (could not swap back to sway)"); fi
+  else
+    kept+=("swayfx")
+  fi
+  return 0
+}
+
+programs_step() {
+  local p want_sway=() list=() swapped=0
+  swap_back && swapped=1
+  for p in $(sway_pkgs); do installed "$p" && want_sway+=("$p"); done
+  if [ "$swapped" -eq 1 ]; then want_sway=(); fi           # (your own sway stays)
+  if [ "${#want_sway[@]}" -gt 0 ] && [ "$(other_desktops)" -eq 0 ] && [ "$force" -eq 0 ]; then
+    warn "sway is the only desktop on this computer - removing it would leave you nothing to log in to."
+    warn "  sway stays. Install another desktop first, or run again with --force."
+    kept+=("${want_sway[@]/%/ (your only desktop)}"); want_sway=()
+  fi
+  for p in "${want_sway[@]}"; do add_candidate "$p"; done
+  for p in "${candidates[@]}"; do
+    case " $(sway_pkgs) " in *" $p "*) printf '%s\n' "${want_sway[@]}" | grep -qxF "$p" || continue ;; esac   # (sway kept above)
+    list+=("$p")
+  done
+  if [ ! -f "$manifest" ] && [ "$all_programs" -eq 0 ]; then
+    say "there is no list of the programs the installer added - only sway itself is offered."
+    say "  to also go through the setup's other programs:  ./uninstall.sh --all-programs"
+  fi
+  [ "${#list[@]}" -gt 0 ] || return 0
+  [ "$FAMILY" = unknown ] && { warn "unknown package manager - remove these yourself: ${list[*]}"; return 0; }
+  say "programs to remove: ${list[*]}"
+  say "  (any of them that other software still needs is kept - that is checked next, with your password)"
+  ask "Remove these programs?" n || { kept+=("${list[@]}"); return 0; }
+  safe_set "${list[@]}"
+  [ "${#removable[@]}" -gt 0 ] && remove_pkgs "${removable[@]}"
+  if [ "${#needed[@]}" -gt 0 ]; then
+    say "kept, because other software needs them: ${needed[*]}"
+    for p in "${needed[@]}"; do kept+=("$p (other software needs it)"); done
+  fi
+  [ "${#removable[@]}" -gt 0 ] || return 0
+  # the package sources the installer added (Fedora COPRs for Ghostty and yazi): each goes once its program is gone
+  if [ -f "$manifest" ]; then
+    local kind value
+    while read -r kind value; do
+      case "$kind" in
+        copr)
+          command -v "${value##*/}" >/dev/null 2>&1 && continue          # (lihaohong/yazi -> yazi still installed)
+          installed "${value##*/}" && continue                             # (swayfx/swayfx -> swayfx still installed)
+          run $SUDO dnf copr remove -y "$value" >/dev/null 2>&1 || run $SUDO dnf copr disable -y "$value" >/dev/null 2>&1
+          gone "the $value COPR" ;;
+      esac
+    done <"$manifest"
+  fi
+  # the "Sway (NVIDIA)" login entry the installer added: goes with sway
+  if ! command -v sway >/dev/null 2>&1 && [ -f "$manifest" ] \
+     && grep -qx "rootpath /usr/share/wayland-sessions/sway-dots-nvidia.desktop" "$manifest" \
+     && [ -f "${SWAYDOTS_TEST_ROOT:-}/usr/share/wayland-sessions/sway-dots-nvidia.desktop" ]; then
+    run $SUDO rm -f "${SWAYDOTS_TEST_ROOT:-}/usr/share/wayland-sessions/sway-dots-nvidia.desktop" && gone "the \"Sway (NVIDIA)\" login entry"
+  fi
+  local s
+  for s in ghostty yazi; do
+    if [ -f "$manifest" ] && grep -qx "snap $s" "$manifest" && command -v snap >/dev/null 2>&1; then
+      ask "Remove the $s snap too?" n && { run $SUDO snap remove "$s" && gone "the $s snap"; }
+    fi
+  done
+}
+
+if [ "$mode" != config ]; then
+  if [ "$mode" = all ] || [ "$dry" -eq 1 ] || ask "Also remove sway itself and the programs the installer added? (the list comes first)" n; then
+    programs_step
+  fi
+fi
+
+# the list of what the installer added goes last (the steps above read it), and the state folder with it
+if [ "$do_config" -eq 1 ]; then
+  for d in "$state" "$HOME/.local/bin/swaydots-uninstall"; do
+    [ -e "$d" ] && { run rm -rf "$d"; gone "${d/#$HOME/\~}"; }
+  done
+fi
+
+# =============================================================================
+#  4. summary
+# =============================================================================
+echo
+if [ "${#removed[@]}" -gt 0 ]; then
+  say "$( [ "$dry" -eq 1 ] && echo 'would remove' || echo 'removed'):"
+  printf '     - %s\n' "${removed[@]}"
+else
+  say "nothing was removed"
+fi
+[ "${#kept[@]}" -gt 0 ] && { say "kept:"; printf '     - %s\n' "${kept[@]}"; }
+cat <<MSG
+
+Done. Log out and pick your other desktop at the login screen.
+  - Your copy of the repo (the folder with this script) is still there - delete it when you no longer need it.
+  - Programs you already had before installing, and your own files, were not touched.
+MSG
+[ "$do_restore" -eq 0 ] && echo "  - Your old configs are still in ~/.config/*.bak-* (--no-restore)."
+exit 0

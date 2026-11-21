@@ -1,0 +1,25 @@
+// The bar without python3 (waybar/launch.sh uses this when the settings window's scripts cannot run): Waybar's
+// own items only, in the default colours. Normally config.jsonc is used (written by the settings window).
+{
+  "layer": "top",
+  "position": "top",
+  "height": 39,
+  "spacing": 0,
+  "modules-left": ["sway/workspaces", "sway/mode"],
+  "modules-right": ["tray", "network", "pulseaudio", "backlight", "battery", "cpu", "memory", "clock",
+                    "custom/powermenu"],
+  "sway/workspaces": {"format": "{name}", "disable-scroll-wraparound": true},
+  "network": {"interface": "wl*", "format-wifi": "󰤨 {essid}", "format-disconnected": "󰖪",
+              "format-ethernet": "󰖪", "format-linked": "󰖪",
+              "on-click": "$HOME/.config/sway/scripts/SettingsGUI.py --tab wifi"},
+  "pulseaudio": {"format": "{icon} {volume}%", "format-muted": "󰝟 muted",
+                 "format-icons": {"default": ["󰕿", "󰖀", "󰕾"]}, "scroll-step": 5},
+  "backlight": {"format": "󰃟 {percent}%"},
+  "battery": {"format": "{icon} {capacity}%", "format-charging": "󰂄 {capacity}%",
+              "format-icons": ["󰁺", "󰁼", "󰁾", "󰂀", "󰁹"]},
+  "cpu": {"format": "󰻠 {usage:2}%", "interval": 2},
+  "memory": {"format": "󰍛 {percentage:2}%", "interval": 3},
+  "clock": {"format": "{:%a %d %b  %H:%M}", "interval": 1, "tooltip-format": "<tt>{calendar}</tt>"},
+  "tray": {"icon-size": 22, "spacing": 6},
+  "custom/powermenu": {"format": "󰐥", "on-click": "$HOME/.config/sway/scripts/Powermenu.sh", "tooltip": false}
+}

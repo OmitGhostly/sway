@@ -1,0 +1,23 @@
+/* The bar (Settings > Appearance > Bar). Written by the settings window each time the bar starts, so edits
+   here are replaced: change waybar/launch.sh or the settings instead. */
+* { font-family: "FantasqueSansM Nerd Font Mono"; font-size: 18px; min-height: 0; border: none; border-radius: 0; padding: 0; margin: 0; box-shadow: none; text-shadow: none; }
+window#waybar { background: rgba(0, 0, 0, 1.000); color: #e6e6e6; border-bottom: 1px solid #303030; }
+window#waybar.hidden { opacity: 0.2; }
+tooltip { background: rgba(0, 0, 0, 0.94); border: 1px solid #ffffff; border-radius: 6px; }
+tooltip label { color: #e6e6e6; padding: 4px 8px; font-size: 16px; }
+#tray { padding: 0 6px; }
+#tray menu { background: #000000; color: #e6e6e6; border: 1px solid #303030; }
+#network { margin: 0 6px 0 6px; }
+#custom-bluetooth { margin: 0 6px 0 6px; }
+#pulseaudio { margin: 0 6px 0 6px; }
+#backlight { margin: 0 6px 0 6px; }
+#custom-caffeine { margin: 0 6px 0 6px; }
+#custom-nightlight { margin: 0 6px 0 6px; }
+#battery { margin: 0 6px 0 6px; }
+#cpu { margin: 0 6px 0 6px; }
+#memory { margin: 0 6px 0 6px; }
+#clock { margin: 0 6px 0 6px; }
+#custom-powermenu { margin: 0 0px 0 6px; }
+#custom-powermenu { margin-right: 0px; }
+#custom-ws1, #custom-ws2, #custom-ws3, #custom-ws4, #custom-ws5, #custom-ws6, #custom-ws7, #custom-ws8, #custom-ws9, #custom-ws10, #custom-wsx, #custom-wsmode { margin-right: 12px; }
+#window { margin-left: 0px; }

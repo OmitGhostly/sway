@@ -1,0 +1,298 @@
+// The bar (Settings > Appearance > Bar). Written by the settings window each time the bar starts, so
+// edits here are replaced: change waybar/launch.sh or the settings instead.
+{
+  "layer": "top",
+  "position": "top",
+  "height": 39,
+  "spacing": 0,
+  "fixed-center": true,
+  "exclusive": true,
+  "modules-left": [
+    "custom/ws1",
+    "custom/ws2",
+    "custom/ws3",
+    "custom/ws4",
+    "custom/ws5",
+    "custom/ws6",
+    "custom/ws7",
+    "custom/ws8",
+    "custom/ws9",
+    "custom/ws10",
+    "custom/wsx",
+    "custom/wsmode"
+  ],
+  "modules-center": [],
+  "modules-right": [
+    "tray",
+    "network",
+    "custom/bluetooth",
+    "pulseaudio",
+    "backlight",
+    "custom/caffeine",
+    "custom/nightlight",
+    "battery",
+    "cpu",
+    "memory",
+    "clock",
+    "custom/powermenu"
+  ],
+  "network": {
+    "interface": "wl*",
+    "interval": 3,
+    "format-wifi": "<span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span><span foreground='#000000' background='#ffffff' rise='5500'> {icon} {essid} {signalStrength}% </span><span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span>",
+    "format-ethernet": "<span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span><span foreground='#000000' background='#ffffff' rise='5500'> 󰖪 </span><span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span>",
+    "format-linked": "<span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span><span foreground='#000000' background='#ffffff' rise='5500'> 󰖪 </span><span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span>",
+    "format-disconnected": "<span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span><span foreground='#000000' background='#ffffff' rise='5500'> 󰖪 </span><span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span>",
+    "format-disabled": "<span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span><span foreground='#000000' background='#ffffff' rise='5500'> 󰖪 </span><span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span>",
+    "format-icons": [
+      "󰤯",
+      "󰤟",
+      "󰤢",
+      "󰤨"
+    ],
+    "on-click": "$HOME/.config/sway/scripts/SettingsGUI.py --tab wifi",
+    "tooltip-format-wifi": "{essid} ({signalStrength}%) {ipaddr}",
+    "tooltip-format-disconnected": "Wi-Fi: not connected"
+  },
+  "custom/bluetooth": {
+    "exec": "$HOME/.config/sway/scripts/BarBluetooth.sh",
+    "interval": 5,
+    "escape": true,
+    "signal": 11,
+    "format": "<span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span><span foreground='#000000' background='#ffffff' rise='5500'> {} </span><span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span>",
+    "on-click": "$HOME/.config/sway/scripts/BluetoothToggle.sh",
+    "on-click-right": "$HOME/.config/sway/scripts/SettingsGUI.py --tab bluetooth",
+    "tooltip": false
+  },
+  "pulseaudio": {
+    "format": "<span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span><span foreground='#000000' background='#ffffff' rise='5500'> {icon} {volume}% </span><span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span>",
+    "format-muted": "<span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span><span foreground='#000000' background='#ffffff' rise='5500'> 󰝟 muted </span><span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span>",
+    "format-bluetooth": "<span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span><span foreground='#000000' background='#ffffff' rise='5500'> {icon} {volume}% </span><span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span>",
+    "format-icons": {
+      "default": [
+        "󰕿",
+        "󰖀",
+        "󰕾"
+      ]
+    },
+    "scroll-step": 5,
+    "on-click": "$HOME/.config/sway/scripts/Volume.sh --toggle",
+    "on-click-right": "$HOME/.config/sway/scripts/SettingsGUI.py --tab sound",
+    "tooltip-format": "{desc}: {volume}%"
+  },
+  "backlight": {
+    "format": "<span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span><span foreground='#000000' background='#ffffff' rise='5500'> 󰃟 {percent}% </span><span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span>",
+    "on-scroll-up": "$HOME/.config/sway/scripts/Brightness.sh --inc",
+    "on-scroll-down": "$HOME/.config/sway/scripts/Brightness.sh --dec",
+    "tooltip": false
+  },
+  "custom/caffeine": {
+    "exec": "$HOME/.config/sway/scripts/Caffeine.sh status",
+    "return-type": "json",
+    "interval": 30,
+    "signal": 9,
+    "format": "<span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span><span foreground='#000000' background='#ffffff' rise='5500'> {} </span><span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span>",
+    "escape": false,
+    "on-click": "$HOME/.config/sway/scripts/Caffeine.sh toggle"
+  },
+  "custom/nightlight": {
+    "exec": "$HOME/.config/sway/scripts/Nightlight.sh status",
+    "return-type": "json",
+    "interval": 30,
+    "signal": 10,
+    "format": "<span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span><span foreground='#000000' background='#ffffff' rise='5500'> {} </span><span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span>",
+    "escape": false,
+    "on-click": "$HOME/.config/sway/scripts/Nightlight.sh toggle"
+  },
+  "battery": {
+    "interval": 30,
+    "full-at": 99,
+    "states": {
+      "low": 15
+    },
+    "format": "<span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span><span foreground='#000000' background='#ffffff' rise='5500'> {icon} {capacity}% </span><span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span>",
+    "format-charging": "<span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span><span foreground='#000000' background='#ffffff' rise='5500'> 󰂄 {capacity}% </span><span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span>",
+    "format-plugged": "<span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span><span foreground='#000000' background='#ffffff' rise='5500'> 󰁹 {capacity}% </span><span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span>",
+    "format-full": "<span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span><span foreground='#000000' background='#ffffff' rise='5500'> 󰁹 {capacity}% </span><span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span>",
+    "format-low": "<span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span><span foreground='#000000' background='#ffffff' rise='5500'> 󰂃 {capacity}% </span><span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span>",
+    "format-icons": [
+      "󰁺",
+      "󰁼",
+      "󰁾",
+      "󰂀",
+      "󰁹"
+    ],
+    "bat": "BAT0",
+    "adapter": "AC"
+  },
+  "cpu": {
+    "interval": 2,
+    "format": "<span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span><span foreground='#000000' background='#ffffff' rise='5500'> 󰻠 {usage:2}% </span><span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span>",
+    "tooltip": false
+  },
+  "memory": {
+    "interval": 3,
+    "format": "<span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span><span foreground='#000000' background='#ffffff' rise='5500'> 󰍛 {percentage:2}% </span><span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span>",
+    "tooltip-format": "{used:0.1f} GiB of {total:0.1f} GiB in use"
+  },
+  "clock": {
+    "interval": 1,
+    "format": "<span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span><span foreground='#000000' background='#ffffff' rise='5500'> {:%a %d %b  %H:%M} </span><span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span>",
+    "tooltip-format": "<tt>{calendar}</tt>",
+    "calendar": {
+      "mode": "month",
+      "weeks-pos": ""
+    }
+  },
+  "custom/powermenu": {
+    "format": "<span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span><span foreground='#000000' background='#ffffff' rise='5500'> <span font_desc='FantasqueSansM Nerd Font Mono 22px' rise='4378'>󰐥</span> </span><span font_desc='FantasqueSansM Nerd Font Mono 36.141px' foreground='#ffffff'></span>",
+    "on-click": "$HOME/.config/sway/scripts/Powermenu.sh",
+    "tooltip-format": "Lock, log out, sleep, restart, shut down"
+  },
+  "custom/ws1": {
+    "exec": "cat \"$XDG_RUNTIME_DIR/swaydots-bar/${WAYBAR_OUTPUT_NAME:-_any}/1\" 2>/dev/null",
+    "return-type": "json",
+    "interval": "once",
+    "signal": 8,
+    "format": "{}",
+    "escape": false,
+    "tooltip": false,
+    "on-scroll-up": "swaymsg -q workspace next_on_output",
+    "on-scroll-down": "swaymsg -q workspace prev_on_output",
+    "on-click": "swaymsg -q workspace number 1"
+  },
+  "custom/ws2": {
+    "exec": "cat \"$XDG_RUNTIME_DIR/swaydots-bar/${WAYBAR_OUTPUT_NAME:-_any}/2\" 2>/dev/null",
+    "return-type": "json",
+    "interval": "once",
+    "signal": 8,
+    "format": "{}",
+    "escape": false,
+    "tooltip": false,
+    "on-scroll-up": "swaymsg -q workspace next_on_output",
+    "on-scroll-down": "swaymsg -q workspace prev_on_output",
+    "on-click": "swaymsg -q workspace number 2"
+  },
+  "custom/ws3": {
+    "exec": "cat \"$XDG_RUNTIME_DIR/swaydots-bar/${WAYBAR_OUTPUT_NAME:-_any}/3\" 2>/dev/null",
+    "return-type": "json",
+    "interval": "once",
+    "signal": 8,
+    "format": "{}",
+    "escape": false,
+    "tooltip": false,
+    "on-scroll-up": "swaymsg -q workspace next_on_output",
+    "on-scroll-down": "swaymsg -q workspace prev_on_output",
+    "on-click": "swaymsg -q workspace number 3"
+  },
+  "custom/ws4": {
+    "exec": "cat \"$XDG_RUNTIME_DIR/swaydots-bar/${WAYBAR_OUTPUT_NAME:-_any}/4\" 2>/dev/null",
+    "return-type": "json",
+    "interval": "once",
+    "signal": 8,
+    "format": "{}",
+    "escape": false,
+    "tooltip": false,
+    "on-scroll-up": "swaymsg -q workspace next_on_output",
+    "on-scroll-down": "swaymsg -q workspace prev_on_output",
+    "on-click": "swaymsg -q workspace number 4"
+  },
+  "custom/ws5": {
+    "exec": "cat \"$XDG_RUNTIME_DIR/swaydots-bar/${WAYBAR_OUTPUT_NAME:-_any}/5\" 2>/dev/null",
+    "return-type": "json",
+    "interval": "once",
+    "signal": 8,
+    "format": "{}",
+    "escape": false,
+    "tooltip": false,
+    "on-scroll-up": "swaymsg -q workspace next_on_output",
+    "on-scroll-down": "swaymsg -q workspace prev_on_output",
+    "on-click": "swaymsg -q workspace number 5"
+  },
+  "custom/ws6": {
+    "exec": "cat \"$XDG_RUNTIME_DIR/swaydots-bar/${WAYBAR_OUTPUT_NAME:-_any}/6\" 2>/dev/null",
+    "return-type": "json",
+    "interval": "once",
+    "signal": 8,
+    "format": "{}",
+    "escape": false,
+    "tooltip": false,
+    "on-scroll-up": "swaymsg -q workspace next_on_output",
+    "on-scroll-down": "swaymsg -q workspace prev_on_output",
+    "on-click": "swaymsg -q workspace number 6"
+  },
+  "custom/ws7": {
+    "exec": "cat \"$XDG_RUNTIME_DIR/swaydots-bar/${WAYBAR_OUTPUT_NAME:-_any}/7\" 2>/dev/null",
+    "return-type": "json",
+    "interval": "once",
+    "signal": 8,
+    "format": "{}",
+    "escape": false,
+    "tooltip": false,
+    "on-scroll-up": "swaymsg -q workspace next_on_output",
+    "on-scroll-down": "swaymsg -q workspace prev_on_output",
+    "on-click": "swaymsg -q workspace number 7"
+  },
+  "custom/ws8": {
+    "exec": "cat \"$XDG_RUNTIME_DIR/swaydots-bar/${WAYBAR_OUTPUT_NAME:-_any}/8\" 2>/dev/null",
+    "return-type": "json",
+    "interval": "once",
+    "signal": 8,
+    "format": "{}",
+    "escape": false,
+    "tooltip": false,
+    "on-scroll-up": "swaymsg -q workspace next_on_output",
+    "on-scroll-down": "swaymsg -q workspace prev_on_output",
+    "on-click": "swaymsg -q workspace number 8"
+  },
+  "custom/ws9": {
+    "exec": "cat \"$XDG_RUNTIME_DIR/swaydots-bar/${WAYBAR_OUTPUT_NAME:-_any}/9\" 2>/dev/null",
+    "return-type": "json",
+    "interval": "once",
+    "signal": 8,
+    "format": "{}",
+    "escape": false,
+    "tooltip": false,
+    "on-scroll-up": "swaymsg -q workspace next_on_output",
+    "on-scroll-down": "swaymsg -q workspace prev_on_output",
+    "on-click": "swaymsg -q workspace number 9"
+  },
+  "custom/ws10": {
+    "exec": "cat \"$XDG_RUNTIME_DIR/swaydots-bar/${WAYBAR_OUTPUT_NAME:-_any}/10\" 2>/dev/null",
+    "return-type": "json",
+    "interval": "once",
+    "signal": 8,
+    "format": "{}",
+    "escape": false,
+    "tooltip": false,
+    "on-scroll-up": "swaymsg -q workspace next_on_output",
+    "on-scroll-down": "swaymsg -q workspace prev_on_output",
+    "on-click": "swaymsg -q workspace number 10"
+  },
+  "custom/wsx": {
+    "exec": "cat \"$XDG_RUNTIME_DIR/swaydots-bar/${WAYBAR_OUTPUT_NAME:-_any}/x\" 2>/dev/null",
+    "return-type": "json",
+    "interval": "once",
+    "signal": 8,
+    "format": "{}",
+    "escape": false,
+    "tooltip": false,
+    "on-scroll-up": "swaymsg -q workspace next_on_output",
+    "on-scroll-down": "swaymsg -q workspace prev_on_output"
+  },
+  "custom/wsmode": {
+    "exec": "cat \"$XDG_RUNTIME_DIR/swaydots-bar/${WAYBAR_OUTPUT_NAME:-_any}/mode\" 2>/dev/null",
+    "return-type": "json",
+    "interval": "once",
+    "signal": 8,
+    "format": "{}",
+    "escape": false,
+    "tooltip": false,
+    "on-scroll-up": "swaymsg -q workspace next_on_output",
+    "on-scroll-down": "swaymsg -q workspace prev_on_output"
+  },
+  "tray": {
+    "icon-size": 23,
+    "spacing": 6
+  }
+}
