@@ -406,12 +406,14 @@ install_shell_hook() {
   # another greeting the shell file runs itself (KoolDots' .zshrc: "pokemon-colorscripts ... | fastfetch ...", or a
   # plain "fastfetch" line) would show a second one: it is turned off, marked so the uninstaller can put it back
   local other='^[[:space:]]*(fastfetch|pokemon-colorscripts[^#]*[|][[:space:]]*fastfetch)([[:space:]]|$)' off='#sway-dots-off# '
-  local line='[ -z "$SWAYDOTS_POKEFETCH" ] && { [ -n "$KITTY_WINDOW_ID" ] || [ "$TERM_PROGRAM" = ghostty ]; } && [ -x "$HOME/.config/sway/scripts/PokeFetch.sh" ] && { SWAYDOTS_POKEFETCH=1; "$HOME/.config/sway/scripts/PokeFetch.sh"; }'
+  # The i3 version of these dots (next to this one on the same computer) adds the same greeting with its own flag,
+  # I3DOTS_POKEFETCH: this line also skips when that one ran first, and sets it, so a later i3 line skips too
+  local line='[ -z "$SWAYDOTS_POKEFETCH$I3DOTS_POKEFETCH" ] && { [ -n "$KITTY_WINDOW_ID" ] || [ "$TERM_PROGRAM" = ghostty ]; } && [ -x "$HOME/.config/sway/scripts/PokeFetch.sh" ] && { SWAYDOTS_POKEFETCH=1; I3DOTS_POKEFETCH=1; "$HOME/.config/sway/scripts/PokeFetch.sh"; }'
   for rc in "${RC_FILES[@]}"; do
     top=0; [ "${rc##*/}" = .zshrc ] && top=1
     if grep -qF "$marker" "$rc" 2>/dev/null; then
       # already there, once, the current version, and (zsh) on the first line: nothing to do
-      if grep -qF 'SWAYDOTS_POKEFETCH' "$rc" && [ "$(grep -cF "$marker" "$rc")" -eq 1 ] \
+      if grep -qxF -- "$line" "$rc" && [ "$(grep -cF "$marker" "$rc")" -eq 1 ] \
          && { [ "$top" -eq 0 ] || [ "$(head -n 1 "$rc")" = "$marker" ]; } && ! grep -qE "$other" "$rc"; then
         continue
       fi
@@ -447,20 +449,24 @@ install_shell_hook() {
 
 # fish: the same greeting as a fish conf.d file (written for the login shell fish, or a fish set up already)
 install_fish_hook() {
-  [ "$do_pokemon" -eq 1 ] || return 0
   local d="$cfg/fish/conf.d" f
   f="$d/sway-dots.fish"
+  # (an update refreshes a greeting you already have, but never adds one you did not choose)
+  [ "$do_pokemon" -eq 1 ] || { [ "$update_mode" -eq 1 ] && [ -f "$f" ]; } || return 0
   [ "$(login_shell)" = fish ] || [ -d "$d" ] || return 0
-  [ -f "$f" ] && grep -qF 'SWAYDOTS_POKEFETCH' "$f" && return 0
-  say "adding the pokemon fastfetch greeting for fish ($f, kitty and ghostty only)"
+  [ -f "$f" ] && grep -qF 'I3DOTS_POKEFETCH' "$f" && return 0
+  if [ -f "$f" ]; then say "refreshing the pokemon fastfetch greeting for fish ($f: one greeting per terminal)"
+  else say "adding the pokemon fastfetch greeting for fish ($f, kitty and ghostty only)"; fi
   [ "$dry" -eq 1 ] && return 0
   mkdir -p "$d" || return 0
   record path "$f"
   cat >"$f" <<'FISH'
 # sway-dots: pokemon fastfetch greeting (kitty and ghostty, once per terminal). Remove this file to turn it off.
-if status is-interactive; and not set -q SWAYDOTS_POKEFETCH
+# (I3DOTS_POKEFETCH: the i3 version's greeting, when both are installed - one greeting, whichever runs first)
+if status is-interactive; and not set -q SWAYDOTS_POKEFETCH; and not set -q I3DOTS_POKEFETCH
     if set -q KITTY_WINDOW_ID; or test "$TERM_PROGRAM" = ghostty
         set -g SWAYDOTS_POKEFETCH 1
+        set -g I3DOTS_POKEFETCH 1
         test -x "$HOME/.config/sway/scripts/PokeFetch.sh"; and "$HOME/.config/sway/scripts/PokeFetch.sh"
     end
 end

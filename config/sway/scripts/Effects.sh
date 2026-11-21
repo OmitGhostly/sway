@@ -19,7 +19,7 @@ saved_shadow_radius() { echo 8; }
 apply_saved() {
   local cmds
   cmds=$(python3 "$s/SettingsGUI.py" --effects 2>/dev/null)
-  [ -n "$cmds" ] || cmds='corner_radius 8; shadows enable; shadow_blur_radius 8; shadow_color #00000073; blur enable; blur_passes 3; blur_radius 5; default_dim_inactive 0.1'
+  [ -n "$cmds" ] || cmds='corner_radius 8; shadows enable; shadow_blur_radius 8; shadow_color #00000073; blur enable; blur_passes 3; blur_radius 5; default_dim_inactive 0.1; dim_inactive_colors.unfocused #000000FF; dim_inactive_colors.urgent #000000FF'
   swaymsg -q "$cmds" >/dev/null 2>&1 || {
     # (an older SwayFX that lacks one of the commands: send them one by one, so the rest still works)
     local c; IFS=';' read -ra parts <<<"$cmds"

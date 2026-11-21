@@ -945,7 +945,10 @@ def sway_effects(settings):
     cmds = ["corner_radius %d" % (level * CORNER_PX), "smart_corner_radius enable",
             "shadows %s" % ("enable" if shadows else "disable"), "shadow_blur_radius 8", "shadow_color #00000073",
             "blur %s" % ("enable" if blur else "disable"), "blur_passes 3", "blur_radius 5",
-            "default_dim_inactive %.2f" % (dim / 100.0)]
+            "default_dim_inactive %.2f" % (dim / 100.0),
+            # (SwayFX dims a window that asks for attention - an app done with something while you are elsewhere -
+            # in dark red unless told otherwise, which looks like the screen turning red: black, like the others)
+            "dim_inactive_colors.unfocused #000000FF", "dim_inactive_colors.urgent #000000FF"]
     # the bar: its see-through background blurred (Waybar's surfaces are called "waybar")
     bar_blur = bar_choice(settings)["bg_mode"] == "blur"
     cmds.append('layer_effects "waybar" "blur %s"' % ("enable" if bar_blur else "disable"))
